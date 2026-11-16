@@ -105,9 +105,22 @@ export const createProduct = async (req, res) => {
             images = [],
         } = req.body;
 
-        if (!name?.trim() || !description?.trim() || !category) {
+        if (
+            typeof name !== 'string' ||
+            !name.trim() ||
+            typeof description !== 'string' ||
+            !description.trim() ||
+            !category
+        ) {
             return res.status(400).json({
-                message: 'Nombre, descripción y categoría son obligatorios',
+                message:
+                    'Nombre, descripción y categoría son obligatorios y deben ser válidos',
+            });
+        }
+
+        if (!Array.isArray(images)) {
+            return res.status(400).json({
+                message: 'Las imágenes deben enviarse en formato de lista',
             });
         }
 
@@ -120,6 +133,18 @@ export const createProduct = async (req, res) => {
         if (!['fixed', 'quote'].includes(pricingType)) {
             return res.status(400).json({
                 message: 'El tipo de precio no es válido',
+            });
+        }
+
+        if (
+            pricingType === 'quote' &&
+            price !== undefined &&
+            price !== null &&
+            price !== ''
+        ) {
+            return res.status(400).json({
+                message:
+                    'Los productos a cotizar no deben tener un precio fijo',
             });
         }
 
@@ -168,13 +193,54 @@ export const createProduct = async (req, res) => {
 };
 
 // Editar producto
+
 export const updateProduct = async (req, res) => {
     try {
         const { id } = req.params;
 
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                message: 'El ID del producto no es válido',
+            });
+        }
+
         const { name, description, category, pricingType, price, images } =
             req.body;
 
+        // Buscar el producto
+        const product = await Product.findById(id);
+
+        if (!product) {
+            return res.status(404).json({
+                message: 'Producto no encontrado',
+            });
+        }
+
+        // Validar nombre
+        if (name !== undefined) {
+            if (typeof name !== 'string' || !name.trim()) {
+                return res.status(400).json({
+                    message:
+                        'El nombre debe ser un texto y no puede estar vacío',
+                });
+            }
+
+            product.name = name.trim();
+        }
+
+        // Validar descripción
+        if (description !== undefined) {
+            if (typeof description !== 'string' || !description.trim()) {
+                return res.status(400).json({
+                    message:
+                        'La descripción debe ser un texto y no puede estar vacía',
+                });
+            }
+
+            product.description = description.trim();
+        }
+
+        // Validar categoría
         if (category !== undefined) {
             if (!mongoose.Types.ObjectId.isValid(category)) {
                 return res.status(400).json({
@@ -192,6 +258,90 @@ export const updateProduct = async (req, res) => {
                     message: 'La categoría no existe o está desactivada',
                 });
             }
+
+            product.category = category;
+        }
+
+        // Validar imágenes
+        if (images !== undefined) {
+            if (!Array.isArray(images)) {
+                return res.status(400).json({
+                    message: 'Las imágenes deben enviarse en formato de lista',
+                });
+            }
+
+            product.images = images;
+        }
+
+        // Validar tipo de precio
+        if (pricingType !== undefined) {
+            if (!['fixed', 'quote'].includes(pricingType)) {
+                return res.status(400).json({
+                    message: 'El tipo de precio no es válido',
+                });
+            }
+
+            product.pricingType = pricingType;
+        }
+
+        // Validar precio
+        if (product.pricingType === 'quote') {
+            if (price !== undefined && price !== null && price !== '') {
+                return res.status(400).json({
+                    message:
+                        'Los productos a cotizar no deben tener un precio fijo',
+                });
+            }
+
+            product.price = undefined;
+        } else {
+            if (price !== undefined) {
+                if (
+                    price === null ||
+                    price === '' ||
+                    !Number.isFinite(Number(price)) ||
+                    Number(price) < 0
+                ) {
+                    return res.status(400).json({
+                        message:
+                            'El precio debe ser un número mayor o igual a cero',
+                    });
+                }
+
+                product.price = Number(price);
+            } else if (product.price === undefined || product.price === null) {
+                return res.status(400).json({
+                    message:
+                        'Los productos con precio fijo deben tener un precio',
+                });
+            }
+        }
+
+        // Guardar cambios
+        await product.save();
+
+        return res.status(200).json({
+            message: 'Producto actualizado correctamente',
+            product,
+        });
+    } catch (error) {
+        console.error('Error al actualizar producto:', error);
+
+        return res.status(500).json({
+            message: 'Error interno al actualizar el producto',
+        });
+    }
+};
+
+// Eliminar producto (baja lógica)
+export const deleteProduct = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                message: 'El ID del producto no es válido',
+            });
         }
 
         const product = await Product.findById(id);
@@ -202,42 +352,15 @@ export const updateProduct = async (req, res) => {
             });
         }
 
-        if (name !== undefined) product.name = name;
-        if (description !== undefined) product.description = description;
-        if (category !== undefined) product.category = category;
-        if (pricingType !== undefined) product.pricingType = pricingType;
-        if (images !== undefined) product.images = images;
-
-        if (product.pricingType === 'quote') {
-            product.price = undefined;
-        } else if (price !== undefined) {
-            product.price = price;
+        if (!product.isActive) {
+            return res.status(400).json({
+                message: 'El producto ya está desactivado',
+            });
         }
 
+        product.isActive = false;
+
         await product.save();
-
-        return res.status(200).json({
-            message: 'Producto actualizado correctamente',
-            product,
-        });
-    } catch (error) {
-        return res.status(400).json({
-            message: 'Error al actualizar el producto',
-            error: error.message,
-        });
-    }
-};
-
-// Eliminar producto (baja lógica)
-export const deleteProduct = async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        const product = await Product.findByIdAndUpdate(
-            id,
-            { isActive: false },
-            { returnDocument: 'after' },
-        );
 
         if (!product) {
             return res.status(404).json({
@@ -250,8 +373,10 @@ export const deleteProduct = async (req, res) => {
             product,
         });
     } catch (error) {
-        return res.status(400).json({
-            message: 'Error al desactivar el producto',
+        console.error('Error al desactivar producto:', error);
+
+        return res.status(500).json({
+            message: 'Error interno al desactivar el producto',
         });
     }
 };
