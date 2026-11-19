@@ -9,19 +9,25 @@ export const loginUser = async (email, password) => {
 
     // Comprobar que exista
     if (!user) {
-        throw new Error('Credenciales incorrectas');
+        const error = new Error('Credenciales incorrectas');
+        error.statusCode = 401;
+        throw error;
     }
 
     // Comprobar que esté activo
     if (!user.isActive) {
-        throw new Error('Usuario desactivado');
+        const error = new Error('Usuario desactivado');
+        error.statusCode = 403;
+        throw error;
     }
 
     // Comparar la contraseña
     const isPasswordValid = await user.comparePassword(password);
 
     if (!isPasswordValid) {
-        throw new Error('Credenciales incorrectas');
+        const error = new Error('Credenciales incorrectas');
+        error.statusCode = 401;
+        throw error;
     }
 
     // Generar el token JWT

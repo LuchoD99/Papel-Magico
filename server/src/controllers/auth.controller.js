@@ -4,7 +4,12 @@ export const login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        if (!email || !password) {
+        if (
+            typeof email !== 'string' ||
+            typeof password !== 'string' ||
+            !email.trim() ||
+            !password.trim()
+        ) {
             return res.status(400).json({
                 message: 'El email y la contraseña son obligatorios',
             });
@@ -17,8 +22,12 @@ export const login = async (req, res) => {
             ...result,
         });
     } catch (error) {
-        return res.status(401).json({
-            message: error.message,
+        console.error('Error en el inicio de sesión:', error);
+
+        return res.status(error.statusCode || 500).json({
+            message: error.statusCode
+                ? error.message
+                : 'Error interno del servidor',
         });
     }
 };

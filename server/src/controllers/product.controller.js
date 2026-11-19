@@ -385,11 +385,15 @@ export const activateProduct = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const product = await Product.findByIdAndUpdate(
-            id,
-            { isActive: true },
-            { returnDocument: 'after' },
-        );
+        // Validar formato del ID
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                message: 'El ID del producto no es válido',
+            });
+        }
+
+        // Buscar el producto
+        const product = await Product.findById(id);
 
         if (!product) {
             return res.status(404).json({
@@ -397,13 +401,27 @@ export const activateProduct = async (req, res) => {
             });
         }
 
+        // Comprobar si ya está activo
+        if (product.isActive) {
+            return res.status(400).json({
+                message: 'El producto ya está activo',
+            });
+        }
+
+        // Reactivar producto
+        product.isActive = true;
+
+        await product.save();
+
         return res.status(200).json({
             message: 'Producto reactivado correctamente',
             product,
         });
     } catch (error) {
-        return res.status(400).json({
-            message: 'Error al reactivar el producto',
+        console.error('Error al reactivar producto:', error);
+
+        return res.status(500).json({
+            message: 'Error interno al reactivar el producto',
         });
     }
 };
