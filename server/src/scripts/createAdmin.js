@@ -1,13 +1,31 @@
 import 'dotenv/config';
+import mongoose from 'mongoose';
 import connectDB from '../config/db.js';
 import User from '../models/User.js';
 
 const createAdmin = async () => {
     try {
+        // Validar variables de entorno
+        if (
+            !process.env.ADMIN_NAME?.trim() ||
+            !process.env.ADMIN_EMAIL?.trim() ||
+            !process.env.ADMIN_PASSWORD
+        ) {
+            throw new Error(
+                'Faltan variables de entorno para crear el administrador',
+            );
+        }
+
+        // Normalizar datos
+        const adminName = process.env.ADMIN_NAME.trim();
+        const adminEmail = process.env.ADMIN_EMAIL.trim().toLowerCase();
+
+        // Conectar con MongoDB
         await connectDB();
 
+        // Comprobar si el administrador ya existe
         const existingUser = await User.findOne({
-            email: process.env.ADMIN_EMAIL,
+            email: adminEmail,
         });
 
         if (existingUser) {
@@ -15,9 +33,10 @@ const createAdmin = async () => {
             return;
         }
 
+        // Crear administrador
         const admin = await User.create({
-            name: process.env.ADMIN_NAME,
-            email: process.env.ADMIN_EMAIL,
+            name: adminName,
+            email: adminEmail,
             password: process.env.ADMIN_PASSWORD,
             role: 'admin',
         });
@@ -27,8 +46,8 @@ const createAdmin = async () => {
         console.error('Error al crear administrador:', error.message);
         process.exitCode = 1;
     } finally {
-        const mongoose = await import('mongoose');
-        await mongoose.default.disconnect();
+        // Cerrar conexión con MongoDB
+        await mongoose.disconnect();
     }
 };
 

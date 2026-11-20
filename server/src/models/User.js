@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema(
             type: String,
             required: true,
             trim: true,
+            minlength: 2,
         },
 
         email: {
@@ -15,12 +16,18 @@ const userSchema = new mongoose.Schema(
             unique: true,
             lowercase: true,
             trim: true,
+            match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
         },
 
         password: {
             type: String,
             required: true,
             minlength: 8,
+            validate: {
+                validator: (value) => value.trim().length >= 8,
+                message:
+                    'La contraseña debe contener al menos 8 caracteres válidos',
+            },
             select: false,
         },
 
@@ -46,6 +53,7 @@ userSchema.pre('save', async function () {
 
     this.password = await bcrypt.hash(this.password, 12);
 });
+
 // Comparar una contraseña ingresada con el hash guardado
 userSchema.methods.comparePassword = async function (candidatePassword) {
     return bcrypt.compare(candidatePassword, this.password);

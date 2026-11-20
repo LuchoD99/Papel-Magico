@@ -28,11 +28,33 @@ export const getAllProducts = async (req, res) => {
         const filter = {};
 
         // Buscar por nombre
-        if (search) {
-            filter.name = {
-                $regex: search,
-                $options: 'i',
-            };
+        if (search !== undefined) {
+            if (typeof search !== 'string') {
+                return res.status(400).json({
+                    message: 'El término de búsqueda no es válido',
+                });
+            }
+
+            const normalizedSearch = search.trim();
+
+            if (normalizedSearch.length > 100) {
+                return res.status(400).json({
+                    message:
+                        'El término de búsqueda no puede superar los 100 caracteres',
+                });
+            }
+
+            if (normalizedSearch) {
+                const escapedSearch = normalizedSearch.replace(
+                    /[.*+?^${}()|[\]\\]/g,
+                    '\\$&',
+                );
+
+                filter.name = {
+                    $regex: escapedSearch,
+                    $options: 'i',
+                };
+            }
         }
 
         // Filtrar por categoría
@@ -58,17 +80,28 @@ export const getAllProducts = async (req, res) => {
         }
 
         // Calcular paginación
-        const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
+        const pageNumber = Number(page);
+        const limitNumber = Number(limit);
 
-        const limitNumber = Math.min(
-            Math.max(parseInt(limit, 10) || 10, 1),
-            50,
-        );
+        if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+            return res.status(400).json({
+                message: 'El número de página debe ser un entero positivo',
+            });
+        }
+
+        if (
+            !Number.isInteger(limitNumber) ||
+            limitNumber < 1 ||
+            limitNumber > 50
+        ) {
+            return res.status(400).json({
+                message: 'El límite debe ser un entero entre 1 y 50',
+            });
+        }
 
         const skip = (pageNumber - 1) * limitNumber;
 
         // Obtener productos
-
         const products = await Product.find(filter)
             .populate('category', 'name')
             .sort({ createdAt: -1 })
@@ -94,6 +127,7 @@ export const getAllProducts = async (req, res) => {
 };
 
 // Crear producto
+
 export const createProduct = async (req, res) => {
     try {
         const {
@@ -105,6 +139,7 @@ export const createProduct = async (req, res) => {
             images = [],
         } = req.body;
 
+        // Validar campos obligatorios
         if (
             typeof name !== 'string' ||
             !name.trim() ||
@@ -118,24 +153,33 @@ export const createProduct = async (req, res) => {
             });
         }
 
-        if (!Array.isArray(images)) {
+        // Validar imágenes
+        if (
+            !Array.isArray(images) ||
+            !images.every(
+                (image) => typeof image === 'string' && image.trim().length > 0,
+            )
+        ) {
             return res.status(400).json({
-                message: 'Las imágenes deben enviarse en formato de lista',
+                message: 'Las imágenes deben ser una lista de URLs válidas',
             });
         }
 
+        // Validar ID de categoría
         if (!mongoose.Types.ObjectId.isValid(category)) {
             return res.status(400).json({
                 message: 'El ID de la categoría no es válido',
             });
         }
 
+        // Validar tipo de precio
         if (!['fixed', 'quote'].includes(pricingType)) {
             return res.status(400).json({
                 message: 'El tipo de precio no es válido',
             });
         }
 
+        // Validar precio para productos a cotizar
         if (
             pricingType === 'quote' &&
             price !== undefined &&
@@ -148,11 +192,13 @@ export const createProduct = async (req, res) => {
             });
         }
 
+        // Validar precio para productos con precio fijo
         if (
             pricingType === 'fixed' &&
             (price === undefined ||
                 price === null ||
-                price === '' ||
+                (typeof price !== 'number' && typeof price !== 'string') ||
+                (typeof price === 'string' && !price.trim()) ||
                 !Number.isFinite(Number(price)) ||
                 Number(price) < 0)
         ) {
@@ -161,6 +207,7 @@ export const createProduct = async (req, res) => {
             });
         }
 
+        // Comprobar que la categoría exista y esté activa
         const existingCategory = await Category.findOne({
             _id: category,
             isActive: true,
@@ -172,13 +219,14 @@ export const createProduct = async (req, res) => {
             });
         }
 
+        // Crear producto
         const product = await Product.create({
-            name,
-            description,
+            name: name.trim(),
+            description: description.trim(),
             category,
             pricingType,
             ...(pricingType === 'fixed' ? { price: Number(price) } : {}),
-            images,
+            images: images.map((image) => image.trim()),
         });
 
         return res.status(201).json({
@@ -186,6 +234,8 @@ export const createProduct = async (req, res) => {
             product,
         });
     } catch (error) {
+        console.error('Error al crear producto:', error);
+
         return res.status(500).json({
             message: 'Error al crear el producto',
         });
@@ -345,12 +395,6 @@ export const deleteProduct = async (req, res) => {
         }
 
         const product = await Product.findById(id);
-
-        if (!product) {
-            return res.status(404).json({
-                message: 'Producto no encontrado',
-            });
-        }
 
         if (!product.isActive) {
             return res.status(400).json({

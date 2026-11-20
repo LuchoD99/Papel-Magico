@@ -1,32 +1,57 @@
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 
 export const authenticate = async (req, res, next) => {
     try {
+        // Comprobar que exista el secreto JWT
+        if (!process.env.JWT_SECRET) {
+            console.error('JWT_SECRET no está configurada');
+
+            return res.status(500).json({
+                message: 'Error interno del servidor',
+            });
+        }
+
         const authHeader = req.headers.authorization;
 
+        // Comprobar que exista el encabezado Bearer
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return res.status(401).json({
                 message: 'No estás autenticado',
             });
         }
 
-        const token = authHeader.split(' ')[1];
+        // Extraer el token
+        const token = authHeader.slice(7).trim();
 
-        // Verificamos que el token sea válido
+        if (!token) {
+            return res.status(401).json({
+                message: 'No estás autenticado',
+            });
+        }
+
+        // Verificar que el token sea válido
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        // Buscamos al usuario en MongoDB
+        // Comprobar que el token contenga un ID válido
+        if (!decoded.id || !mongoose.isValidObjectId(decoded.id)) {
+            return res.status(401).json({
+                message: 'Token inválido o expirado',
+            });
+        }
+
+        // Buscar al usuario en MongoDB
         const user = await User.findById(decoded.id);
 
-        // Comprobamos que exista y esté activo
+        // Comprobar que exista y esté activo
         if (!user || !user.isActive) {
             return res.status(401).json({
                 message: 'Usuario inexistente o desactivado',
             });
         }
 
-        // Guardamos los datos actuales del usuario
+        // Guardar los datos actuales del usuario
         req.user = {
             id: user._id,
             name: user.name,

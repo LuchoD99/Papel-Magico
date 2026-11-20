@@ -17,4 +17,20 @@ app.use(morgan('dev'));
 
 app.use('/api', apiRoutes);
 
+// Manejo de rutas inexistentes
+app.use((req, res) => {
+    return res.status(404).json({
+        message: 'Ruta no encontrada',
+    });
+});
+
+// Manejo general de errores
+app.use((err, req, res, next) => {
+    console.error('Error del servidor:', err);
+
+    return res.status(500).json({
+        message: 'Error interno del servidor',
+    });
+});
+
 export default app;
